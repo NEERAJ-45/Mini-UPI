@@ -2,9 +2,9 @@ name: Java CI with Maven
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
   workflow_dispatch:
 
 jobs:
@@ -24,10 +24,27 @@ jobs:
 
     - name: Start Infrastructure (Postgres, Redis, Kafka)
       run: |
-        docker-compose up -d postgres redis kafka zookeeper
-        # Wait a few seconds for services to initialize
-        sleep 15
-        docker-compose ps
+        docker compose up -d postgres redis kafka zookeeper
+        docker compose ps
+
+    # 🔥 Proper readiness check (critical improvement)
+    - name: Wait for Postgres
+      run: |
+        until docker compose exec -T postgres pg_isready -U postgres; do
+          echo "Waiting for Postgres..."
+          sleep 2
+        done
+
+    - name: Wait for Redis
+      run: |
+        until docker compose exec -T redis redis-cli ping | grep PONG; do
+          echo "Waiting for Redis..."
+          sleep 2
+        done
+
+    - name: Wait for Kafka
+      run: |
+        sleep 20  # Kafka needs a bit more time (can be improved further)
 
     - name: Build and Verify with Maven
       run: ./mvnw clean verify -B
@@ -38,4 +55,4 @@ jobs:
       with:
         name: test-results
         path: '**/target/surefire-reports/'
-        retention-days: 7
+        retention-days: 8 
