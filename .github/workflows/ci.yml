@@ -2,9 +2,9 @@ name: Java CI with Maven
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -22,32 +22,199 @@ jobs:
         distribution: 'temurin'
         cache: maven
 
-    - name: Start Infrastructure (Postgres, Redis, Kafka)
+    - name: Debug Runner Environment
       run: |
+        echo "===== SYSTEM INFO ====="
+        uname -a
+
+        echo ""
+        echo "===== JAVA VERSION ====="
+        java -version
+
+        echo ""
+        echo "===== DOCKER VERSION ====="
+        docker --version
+
+        echo ""
+        echo "===== DOCKER COMPOSE VERSION ====="
+        docker compose version
+
+    - name: Create .env file
+      run: |
+        echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
+        echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+        echo "POSTGRES_HOST=postgres" >> .env
+        echo "POSTGRES_PORT=5432" >> .env
+
+        echo "REDIS_HOST=redis" >> .env
+        echo "REDIS_PORT=6379" >> .env
+        echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}" >> .env
+
+        echo "KAFKA_BOOTSTRAP_SERVERS=kafka:9092" >> .env
+
+        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+        echo "JWT_EXPIRY_MS=86400000" >> .env
+
+        echo "USER_SERVICE_PORT=8081" >> .env
+        echo "WALLET_SERVICE_PORT=8082" >> .env
+        echo "TRANSACTION_SERVICE_PORT=8083" >> .env
+        echo "NOTIFICATION_SERVICE_PORT=8084" >> .env
+        echo "GATEWAY_PORT=8080" >> .env
+
+    - name: Verify .env Variables
+      run: |
+        echo "===== VERIFYING .ENV ====="
+
+        if [ ! -f .env ]; then
+          echo ".env file NOT FOUND"
+          exit 1
+        fi
+
+        echo ".env file exists"
+
+        echo ""
+        echo "===== SAFE VARIABLES ====="
+        grep -E 'HOST|PORT|EXPIRY' .env || true
+
+        echo ""
+        echo "===== SECRET VARIABLES CHECK ====="
+
+        grep POSTGRES_USER .env && echo "POSTGRES_USER OK"
+        grep POSTGRES_PASSWORD .env && echo "POSTGRES_PASSWORD OK"
+        grep REDIS_PASSWORD .env && echo "REDIS_PASSWORD OK"
+        grep JWT_SECRET .env && echo "JWT_SECRET OK"
+
+    - name: Start Infrastructure Containers
+      run: |
+        echo "===== STARTING CONTAINERS ====="
+
         docker compose up -d postgres redis kafka zookeeper
+
+        echo ""
+        echo "===== CONTAINER STATUS ====="
         docker compose ps
 
-    # 🔥 Proper readiness check (critical improvement)
-    - name: Wait for Postgres
+    - name: Debug Container Health
       run: |
-        until docker compose exec -T postgres pg_isready -U postgres; do
-          echo "Waiting for Postgres..."
+        echo "===== RUNNING CONTAINERS ====="
+        docker ps -a
+
+        echo ""
+        echo "===== DOCKER NETWORKS ====="
+        docker network ls
+
+        echo ""
+        echo "===== DOCKER COMPOSE SERVICES ====="
+        docker compose ps
+
+    - name: Debug PostgreSQL Logs
+      run: |
+        echo "===== POSTGRES LOGS ====="
+        docker compose logs postgres || true
+
+    - name: Debug Redis Logs
+      run: |
+        echo "===== REDIS LOGS ====="
+        docker compose logs redis || true
+
+    - name: Debug Kafka Logs
+      run: |
+        echo "===== KAFKA LOGS ====="
+        docker compose logs kafka || true
+
+    - name: Wait for PostgreSQL
+      run: |
+        echo "===== WAITING FOR POSTGRES ====="
+
+        ATTEMPTS=0
+        MAX_ATTEMPTS=30
+
+        until docker compose exec -T postgres pg_isready -U ${{ secrets.POSTGRES_USER }}
+        do
+          ATTEMPTS=$((ATTEMPTS+1))
+
+          echo "Postgres not ready yet..."
+          echo "Attempt: $ATTEMPTS/$MAX_ATTEMPTS"
+
+          docker compose ps
+
+          if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
+            echo "Postgres failed to start"
+
+            echo ""
+            echo "===== FINAL POSTGRES LOGS ====="
+            docker compose logs postgres
+
+            exit 1
+          fi
+
           sleep 2
         done
+
+        echo "Postgres is READY"
 
     - name: Wait for Redis
       run: |
-        until docker compose exec -T redis redis-cli ping | grep PONG; do
-          echo "Waiting for Redis..."
+        echo "===== WAITING FOR REDIS ====="
+
+        ATTEMPTS=0
+        MAX_ATTEMPTS=20
+
+        until docker compose exec -T redis redis-cli ping | grep PONG
+        do
+          ATTEMPTS=$((ATTEMPTS+1))
+
+          echo "Redis not ready yet..."
+          echo "Attempt: $ATTEMPTS/$MAX_ATTEMPTS"
+
+          if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
+            echo "Redis failed to start"
+
+            echo ""
+            echo "===== FINAL REDIS LOGS ====="
+            docker compose logs redis
+
+            exit 1
+          fi
+
           sleep 2
         done
 
+        echo "Redis is READY"
+
     - name: Wait for Kafka
       run: |
-        sleep 20  # Kafka needs a bit more time (can be improved further)
+        echo "===== WAITING FOR KAFKA ====="
+
+        sleep 30
+
+        echo "Kafka startup wait complete"
+
+        echo ""
+        echo "===== FINAL KAFKA STATUS ====="
+        docker compose ps
 
     - name: Build and Verify with Maven
-      run: ./mvnw clean verify -B
+      run: |
+        echo "===== STARTING MAVEN BUILD ====="
+
+        chmod +x mvnw
+
+        ./mvnw clean verify -B
+
+    - name: Final Container Logs
+      if: always()
+      run: |
+        echo "===== FINAL POSTGRES LOGS ====="
+        docker compose logs postgres || true
+          
+        echo ""
+        echo "===== FINAL REDIS LOGS ====="
+        docker compose logs redis || true
+
+        echo ""
+        echo "===== FINAL KAFKA LOGS ====="
+        docker compose logs kafka || true
 
     - name: Upload Test Results
       if: always()
@@ -55,4 +222,4 @@ jobs:
       with:
         name: test-results
         path: '**/target/surefire-reports/'
-        retention-days: 8 
+        retention-days: 7
