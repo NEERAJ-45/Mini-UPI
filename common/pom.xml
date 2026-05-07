@@ -23,9 +23,8 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
         </dependency>
-    </dependencies>
+        </dependencies>
 
-    <!-- No Spring Boot plugin — this is a library, not an executable -->
     <build>
         <plugins>
             <plugin>
