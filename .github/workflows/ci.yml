@@ -5,12 +5,12 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:          # allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: upi          # secrets stored under this environment
+    environment: upi
 
     steps:
       - name: Checkout Code
@@ -29,6 +29,10 @@ jobs:
           test -n "${{ secrets.POSTGRES_PASSWORD }}" || (echo "POSTGRES_PASSWORD missing" && exit 1)
           test -n "${{ secrets.REDIS_PASSWORD }}" || (echo "REDIS_PASSWORD missing" && exit 1)
           test -n "${{ secrets.JWT_SECRET }}" || (echo "JWT_SECRET missing" && exit 1)
+
+      - name: Remove obsolete 'version' from docker-compose.yml
+        run: |
+          sed -i '/^version:/d' docker-compose.yml
 
       - name: Create .env
         run: |
@@ -56,34 +60,34 @@ jobs:
 
       - name: Start Infrastructure
         run: |
-          docker compose up -d postgres redis kafka zookeeper
-          docker compose ps
+          docker compose --env-file .env up -d postgres redis kafka zookeeper
+          docker compose --env-file .env ps
 
       - name: Wait for PostgreSQL
         run: |
           for i in {1..30}; do
-            if docker compose exec -T postgres pg_isready -U ${{ secrets.POSTGRES_USER }}; then
+            if docker compose --env-file .env exec -T postgres pg_isready -U ${{ secrets.POSTGRES_USER }}; then
               echo "Postgres is ready"
               exit 0
             fi
             echo "Waiting for Postgres..."
             sleep 2
           done
-          docker compose logs postgres
+          docker compose --env-file .env logs postgres
           exit 1
 
       - name: Wait for Redis
         run: |
           export REDISCLI_AUTH="${{ secrets.REDIS_PASSWORD }}"
           for i in {1..20}; do
-            if docker compose exec -T redis redis-cli ping | grep -q PONG; then
+            if docker compose --env-file .env exec -T redis redis-cli ping | grep -q PONG; then
               echo "Redis is ready"
               exit 0
             fi
             echo "Waiting for Redis..."
             sleep 2
           done
-          docker compose logs redis
+          docker compose --env-file .env logs redis
           exit 1
 
       - name: Build and Test
