@@ -5,12 +5,12 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch:          # allow manual trigger
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: upi
+    environment: upi          # secrets stored under this environment
 
     steps:
       - name: Checkout Code
@@ -29,6 +29,30 @@ jobs:
           test -n "${{ secrets.POSTGRES_PASSWORD }}" || (echo "POSTGRES_PASSWORD missing" && exit 1)
           test -n "${{ secrets.REDIS_PASSWORD }}" || (echo "REDIS_PASSWORD missing" && exit 1)
           test -n "${{ secrets.JWT_SECRET }}" || (echo "JWT_SECRET missing" && exit 1)
+
+      - name: Create .env
+        run: |
+          cat <<EOF > .env
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
+
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+
+          KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRY_MS=86400000
+
+          USER_SERVICE_PORT=8081
+          WALLET_SERVICE_PORT=8082
+          TRANSACTION_SERVICE_PORT=8083
+          NOTIFICATION_SERVICE_PORT=8084
+          GATEWAY_PORT=8080
+          EOF
 
       - name: Start Infrastructure
         run: |
@@ -62,37 +86,9 @@ jobs:
           docker compose logs redis
           exit 1
 
-      - name: Wait for Kafka
-        run: |
-          for i in {1..30}; do
-            if docker compose exec -T kafka kafka-topics --bootstrap-server localhost:9092 --list; then
-              echo "Kafka is ready"
-              exit 0
-            fi
-            echo "Waiting for Kafka..."
-            sleep 2
-          done
-          docker compose logs kafka
-          exit 1
-
       - name: Build and Test
-        env:
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_EXPIRY_MS: 86400000
-          USER_SERVICE_PORT: 8081
-          WALLET_SERVICE_PORT: 8082
-          TRANSACTION_SERVICE_PORT: 8083
-          NOTIFICATION_SERVICE_PORT: 8084
-          GATEWAY_PORT: 8080
         run: |
+          chmod +x mvnw
           ./mvnw clean verify -B
 
       - name: Upload Test Results
