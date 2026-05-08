@@ -92,7 +92,7 @@ jobs:
       - name: Build and Test
         run: |
           chmod +x mvnw
-          ./mvnw clean verify -B -pl common,user-service -am
+          ./mvnw clean verify -B -pl common,user-service -am -DfailIfNoTests=false
 
       - name: Upload Test Results
         if: always()
