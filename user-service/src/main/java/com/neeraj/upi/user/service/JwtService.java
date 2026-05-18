@@ -1,5 +1,6 @@
 package com.neeraj.upi.user.service;
 
+import com.neeraj.upi.user.exception.InvalidJwtException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -34,22 +35,22 @@ public class JwtService {
 
 
         //Decode Base64 into bytes
-        byte [] keys  = Decoders.BASE64.decode(secret);
+        byte[] keys = Decoders.BASE64.decode(secret);
         //  Create Hmac SHA Signing key from secret bytes
-        Key key  = Keys.hmacShaKeyFor(keys);
+        Key key = Keys.hmacShaKeyFor(keys);
 
         // Current Timestamp
         Date currentDate = new Date();
-         Date expiryDate = new Date(currentDate.getTime() + expiryMs);
+        Date expiryDate = new Date(currentDate.getTime() + expiryMs);
 
 
-         return  Jwts.builder()
-                 .claims(claims)
-                 .subject(userId.toString())
-                 .issuedAt(currentDate)
-                 .expiration(expiryDate)
-                 .signWith(key, SignatureAlgorithm.HS256)
-                 .compact();
+        return Jwts.builder()
+                .claims(claims)
+                .subject(userId.toString())
+                .issuedAt(currentDate)
+                .expiration(expiryDate)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
     }
 
     /**
@@ -57,21 +58,33 @@ public class JwtService {
      */
     public Claims validateAndExtract(String token) {
         // TODO: use Jwts.parser().verifyWith(key).build().parseSignedClaims(token)
-        throw new UnsupportedOperationException("Not implemented yet");
+        byte[] keys = Decoders.BASE64.decode(secret);
+
+        Key key = Keys.hmacShaKeyFor(keys);
+
+        return Jwts.parser()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
     }
 
     public String extractUserId(String token) {
-        // TODO: return validateAndExtract(token).getSubject()
-        throw new UnsupportedOperationException("Not implemented yet");
+        return validateAndExtract(token).getSubject();
     }
 
     public String extractUpiId(String token) {
-        // TODO: return validateAndExtract(token).get("upiId", String.class)
-        throw new UnsupportedOperationException("Not implemented yet");
+        return validateAndExtract(token).get("upiId", String.class);
     }
 
     public boolean isTokenValid(String token) {
-        // TODO: try validateAndExtract, catch Exception return false
-        throw new UnsupportedOperationException("Not implemented yet");
+        try {
+            validateAndExtract(token);
+            return true;
+        } catch (InvalidJwtException jwtException) {
+            log.warn("JWT validation failed: {}", jwtException.getMessage());
+
+            throw new InvalidJwtException("Invalid or expired JWT token");
+        }
     }
 }
