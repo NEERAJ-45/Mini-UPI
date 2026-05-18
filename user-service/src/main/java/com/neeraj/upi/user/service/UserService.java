@@ -45,7 +45,7 @@ public class UserService {
         log.info("User Registered Successfully userId={} , upiId={}", savedUser.getId(), savedUser.getUpiId());
 
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getUpiId(), savedUser.getPhone());
-        UserCreatedEvent event = UserCreatedEvent.builder().userId(savedUser.getId()).upiId(savedUser.getUpiId()).fullName(savedUser.getUpiId()).phone(savedUser.getPhone()).createdAt(savedUser.getCreatedAt()).build();
+        UserCreatedEvent event = UserCreatedEvent.builder().userId(savedUser.getId()).upiId(savedUser.getUpiId()).fullName(savedUser.getFullName()).phone(savedUser.getPhone()).createdAt(savedUser.getCreatedAt()).build();
         eventPublisher.publishUserCreated(event);
         return AuthResponse.of(token, savedUser.getUpiId(), savedUser.getFullName());
     }
@@ -77,7 +77,7 @@ public class UserService {
         // Done : find user by ID, map to UserProfileResponse
 
         User user = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-
+        log.info("Fetching user profile by userId={}", userId);
         return UserProfileResponse.builder().id(user.getId()).fullName(user.getFullName()).phone(user.getPhone()).email(user.getEmail()).upiId(user.getUpiId()).isActive(user.isActive()).createdAt(user.getCreatedAt()).build();
 
 
@@ -87,7 +87,7 @@ public class UserService {
     public UserProfileResponse getByUpiId(String upiId) {
 
         User user = userRepository.findByUpiId(upiId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-
+        log.info("Fetching user profile by upiId={}", upiId);
         return UserProfileResponse.builder()
         .id(user.getId())
         .fullName(user.getFullName())
