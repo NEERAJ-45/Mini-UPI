@@ -6,7 +6,7 @@ This document provides a detailed technical overview of the Mini UPI Simulator's
 
 ## 🏛️ High-Level Visual Overview
 
-![UPI Architecture Visualization](file:///C:/Users/Neeraj.Surnis/.gemini/antigravity/brain/1a541e71-54bd-4ccf-8170-939651a63d29/upi_microservices_architecture_1778145335944.png)
+![UPI Architecture Visualization](./arch.png)
 
 ---
 
