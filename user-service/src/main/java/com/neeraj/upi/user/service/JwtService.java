@@ -81,8 +81,8 @@ public class JwtService {
         try {
             validateAndExtract(token);
             return true;
-        } catch (InvalidJwtException jwtException) {
-            log.warn("JWT validation failed: {}", jwtException.getMessage());
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException e) {
+            log.warn("JWT validation failed: {}", e.getMessage());
 
             throw new InvalidJwtException("Invalid or expired JWT token");
         }

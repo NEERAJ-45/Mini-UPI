@@ -22,11 +22,13 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         // TODO:
-        // - Disable CSRF (stateless API)
-        // - Session: STATELESS
-        // - Permit: /auth/**, /swagger-ui/**, /api-docs/**
-        // - Authenticate: all other requests
-        // - Add jwtAuthFilter before UsernamePasswordAuthenticationFilter
+        http.csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/auth/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
