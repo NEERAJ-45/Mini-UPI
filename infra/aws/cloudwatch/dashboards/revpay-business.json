@@ -1,0 +1,95 @@
+{
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0, "y": 0, "width": 24, "height": 1,
+      "properties": {
+        "markdown": "# 💳 RevPay — Business Dashboard\n_Payment KPIs, Saga health, Idempotency_"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 1, "width": 12, "height": 6,
+      "properties": {
+        "title": "Payment TPS (Success vs Failure)",
+        "metrics": [
+          ["RevPay/Transactions", "PaymentSuccessCount", {"stat": "Sum", "period": 60, "label": "✅ Success", "color": "#2ca02c"}],
+          ["RevPay/Transactions", "PaymentFailureCount", {"stat": "Sum", "period": 60, "label": "❌ Failed", "color": "#d62728"}]
+        ],
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0, "label": "Count/min"}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 1, "width": 12, "height": 6,
+      "properties": {
+        "title": "Payment Latency P99 (ms)",
+        "metrics": [
+          ["RevPay/Transactions", "PaymentLatencyP99", {"stat": "p99", "period": 60, "label": "P99 Latency", "color": "#ff7f0e"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0, "label": "Milliseconds"}},
+        "annotations": {
+          "horizontal": [
+            {"label": "SLA Threshold", "value": 2000, "color": "#d62728", "fill": "above"}
+          ]
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 7, "width": 6, "height": 4,
+      "properties": {
+        "title": "🔴 Saga Pending Count",
+        "metrics": [
+          ["RevPay/Transactions", "SagaPendingCount", {"stat": "Maximum", "period": 60}]
+        ],
+        "view": "singleValue",
+        "region": "ap-south-1"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 6, "y": 7, "width": 6, "height": 4,
+      "properties": {
+        "title": "🔁 Idempotency Cache Hits",
+        "metrics": [
+          ["RevPay/Transactions", "IdempotencyCacheHits", {"stat": "Sum", "period": 300}]
+        ],
+        "view": "singleValue",
+        "region": "ap-south-1"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 7, "width": 6, "height": 4,
+      "properties": {
+        "title": "📤 Outbox Pending",
+        "metrics": [
+          ["RevPay/UserService", "OutboxPendingCount", {"stat": "Maximum", "period": 60}]
+        ],
+        "view": "singleValue",
+        "region": "ap-south-1"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 18, "y": 7, "width": 6, "height": 4,
+      "properties": {
+        "title": "📊 Total Payments (Today)",
+        "metrics": [
+          ["RevPay/Transactions", "PaymentSuccessCount", {"stat": "Sum", "period": 86400, "label": "Success"}],
+          ["RevPay/Transactions", "PaymentFailureCount", {"stat": "Sum", "period": 86400, "label": "Failed"}]
+        ],
+        "view": "singleValue",
+        "region": "ap-south-1"
+      }
+    }
+  ]
+}

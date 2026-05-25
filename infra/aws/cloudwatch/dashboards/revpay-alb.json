@@ -1,0 +1,106 @@
+{
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0, "y": 0, "width": 24, "height": 1,
+      "properties": {
+        "markdown": "# 🌐 RevPay — ALB & Traffic Dashboard\n_Load balancer health, traffic patterns, target status. Uses FREE ALB built-in metrics (not counted in 10 custom metric limit)._"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 1, "width": 12, "height": 6,
+      "properties": {
+        "title": "ALB Request Count",
+        "metrics": [
+          ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Sum", "period": 60, "label": "Requests/min", "color": "#1f77b4"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 1, "width": 12, "height": 6,
+      "properties": {
+        "title": "Target Response Time (seconds)",
+        "metrics": [
+          ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "p99", "period": 60, "label": "P99", "color": "#d62728"}],
+          ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Average", "period": 60, "label": "Average", "color": "#2ca02c"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0, "label": "Seconds"}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 7, "width": 6, "height": 4,
+      "properties": {
+        "title": "✅ Healthy Targets",
+        "metrics": [
+          ["AWS/ApplicationELB", "HealthyHostCount", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX", "TargetGroup", "REVPAY_TG_ARN_SUFFIX",
+           {"stat": "Minimum", "period": 60}]
+        ],
+        "view": "singleValue",
+        "region": "ap-south-1"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 6, "y": 7, "width": 6, "height": 4,
+      "properties": {
+        "title": "❌ Unhealthy Targets",
+        "metrics": [
+          ["AWS/ApplicationELB", "UnHealthyHostCount", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX", "TargetGroup", "REVPAY_TG_ARN_SUFFIX",
+           {"stat": "Maximum", "period": 60}]
+        ],
+        "view": "singleValue",
+        "region": "ap-south-1"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 7, "width": 12, "height": 4,
+      "properties": {
+        "title": "Active Connections",
+        "metrics": [
+          ["AWS/ApplicationELB", "ActiveConnectionCount", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Sum", "period": 60, "label": "Active", "color": "#9467bd"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 11, "width": 24, "height": 6,
+      "properties": {
+        "title": "HTTP Status Code Distribution",
+        "metrics": [
+          ["AWS/ApplicationELB", "HTTPCode_Target_2XX_Count", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Sum", "period": 60, "label": "2xx ✅", "color": "#2ca02c"}],
+          ["AWS/ApplicationELB", "HTTPCode_Target_4XX_Count", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Sum", "period": 60, "label": "4xx ⚠️", "color": "#ff7f0e"}],
+          ["AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Sum", "period": 60, "label": "5xx ❌", "color": "#d62728"}],
+          ["AWS/ApplicationELB", "HTTPCode_ELB_5XX_Count", "LoadBalancer", "REVPAY_ALB_ARN_SUFFIX",
+           {"stat": "Sum", "period": 60, "label": "ELB 5xx 💀", "color": "#7f7f7f"}]
+        ],
+        "view": "timeSeries",
+        "stacked": true,
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0, "label": "Count/min"}}
+      }
+    }
+  ]
+}

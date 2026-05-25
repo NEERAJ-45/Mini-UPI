@@ -1,0 +1,85 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "root",
+    "region": "ap-south-1"
+  },
+  "metrics": {
+    "namespace": "RevPay/Infrastructure",
+    "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "aggregation_dimensions": [["InstanceId"]],
+    "metrics_collected": {
+      "cpu": {
+        "measurement": ["cpu_usage_idle", "cpu_usage_user", "cpu_usage_system"],
+        "metrics_collection_interval": 60,
+        "totalcpu": true
+      },
+      "disk": {
+        "measurement": ["disk_used_percent"],
+        "metrics_collection_interval": 60,
+        "resources": ["/"]
+      },
+      "mem": {
+        "measurement": ["mem_used_percent"],
+        "metrics_collection_interval": 60
+      },
+      "net": {
+        "measurement": ["bytes_sent", "bytes_recv"],
+        "metrics_collection_interval": 60,
+        "resources": ["eth0"]
+      }
+    }
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/revpay/api-gateway.log",
+            "log_group_name": "/revpay/dev/api-gateway",
+            "log_stream_name": "{instance_id}/api-gateway",
+            "timezone": "UTC",
+            "retention_in_days": 7
+          },
+          {
+            "file_path": "/var/log/revpay/user-service.log",
+            "log_group_name": "/revpay/dev/user-service",
+            "log_stream_name": "{instance_id}/user-service",
+            "timezone": "UTC",
+            "retention_in_days": 7
+          },
+          {
+            "file_path": "/var/log/revpay/wallet-service.log",
+            "log_group_name": "/revpay/dev/wallet-service",
+            "log_stream_name": "{instance_id}/wallet-service",
+            "timezone": "UTC",
+            "retention_in_days": 7
+          },
+          {
+            "file_path": "/var/log/revpay/transaction-service.log",
+            "log_group_name": "/revpay/dev/transaction-service",
+            "log_stream_name": "{instance_id}/transaction-service",
+            "timezone": "UTC",
+            "retention_in_days": 14
+          },
+          {
+            "file_path": "/var/log/revpay/notification-service.log",
+            "log_group_name": "/revpay/dev/notification-service",
+            "log_stream_name": "{instance_id}/notification-service",
+            "timezone": "UTC",
+            "retention_in_days": 3
+          },
+          {
+            "file_path": "/var/log/syslog",
+            "log_group_name": "/revpay/dev/ec2-host",
+            "log_stream_name": "{instance_id}/syslog",
+            "timezone": "UTC",
+            "retention_in_days": 3
+          }
+        ]
+      }
+    }
+  }
+}

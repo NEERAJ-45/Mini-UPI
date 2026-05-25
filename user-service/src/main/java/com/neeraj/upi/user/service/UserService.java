@@ -1,10 +1,16 @@
 package com.neeraj.upi.user.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neeraj.upi.user.dto.*;
+import com.neeraj.upi.user.entity.OutboxEvent;
 import com.neeraj.upi.user.entity.User;
 import com.neeraj.upi.user.event.UserCreatedEvent;
+import com.neeraj.upi.user.exception.InvalidCredentialsException;
+import com.neeraj.upi.user.exception.UserAlreadyExistsException;
+import com.neeraj.upi.user.exception.UserNotFoundException;
+import com.neeraj.upi.user.repository.OutboxEventRepository;
 import com.neeraj.upi.user.repository.UserRepository;
-import com.neeraj.upi.user.kafka.UserEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -19,91 +25,144 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final OutboxEventRepository outboxEventRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UpiIdGenerator upiIdGenerator;
-    private final UserEventPublisher eventPublisher;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public AuthResponse register(RegisterRequest req) {
-        // Check duplicate phone number
-        if (userRepository.existsByPhone(req.getPhone())) {
-            throw new IllegalArgumentException("Phone number already registered");
-        }
 
-        // Generate unique UPI ID
-        String upiId = upiIdGenerator.generate(req.getFullName());
+        validateDuplicatePhone(req.getPhone());
 
-        // Hash PIN using BCrypt
-        String hashedPin = passwordEncoder.encode(req.getPin());
+        User savedUser = createAndSaveUser(req);
 
-        // Build and save user entity
-        User user = User.builder().fullName(req.getFullName()).phone(req.getPhone()).email(req.getEmail()).upiId(upiId).pinHash(hashedPin).isActive(true).build();
-        User savedUser = userRepository.save(user);
+        saveUserCreatedOutboxEvent(savedUser);
 
-        // Publish user creation event for wallet onboarding
-        log.info("User Registered Successfully userId={} , upiId={}", savedUser.getId(), savedUser.getUpiId());
+        String token = jwtService.generateToken(
+                savedUser.getId(),
+                savedUser.getUpiId(),
+                savedUser.getPhone());
 
-        String token = jwtService.generateToken(savedUser.getId(), savedUser.getUpiId(), savedUser.getPhone());
-        UserCreatedEvent event = UserCreatedEvent.builder().userId(savedUser.getId()).upiId(savedUser.getUpiId()).fullName(savedUser.getFullName()).phone(savedUser.getPhone()).createdAt(savedUser.getCreatedAt()).build();
-        
-        // TODO: Implement Transactional Outbox Pattern to guarantee At-Least-Once Delivery.
-        //       Instead of publishing directly to Kafka inside this transactional block:
-        //       1. Serialize the 'event' to JSON using ObjectMapper.
-        //       2. Save it as an OutboxEvent entity into the database (within this active transaction).
-        //       3. The OutboxScheduler will poll the DB, dispatch it to Kafka, and mark it as processed.
-        eventPublisher.publishUserCreated(event);
-        
-        return AuthResponse.of(token, savedUser.getUpiId(), savedUser.getFullName());
+        log.info("User registered: userId={} upiId={}",
+                savedUser.getId(),
+                savedUser.getUpiId());
+
+        return AuthResponse.of(
+                token,
+                savedUser.getUpiId(),
+                savedUser.getFullName());
     }
 
     @Transactional(readOnly = true)
-
     public AuthResponse login(LoginRequest req) {
-        //Find User By Phone
-        User user = userRepository.findByPhone(req.getPhone()).orElseThrow(() -> new IllegalArgumentException("Invalid Pin or Phone"));
+        // 1. Lookup by phone — use a vague error message to avoid user enumeration
+        User user = userRepository.findByPhone(req.getPhone())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid phone number or PIN"));
 
-        // verify BCrypt Pin
-        boolean matches = passwordEncoder.matches(req.getPin(), user.getPinHash());
+        // 2. Verify BCrypt PIN
+        if (!passwordEncoder.matches(req.getPin(), user.getPinHash())) {
+            throw new InvalidCredentialsException("Invalid phone number or PIN");
+        }
 
-        if (!matches)
-            throw new IllegalArgumentException("Invalid Pin or Phone");
-        // Check account status
-        if (!user.isActive()) throw new IllegalStateException("User Account is not active");
+        // 3. Check account status
+        if (!user.isActive()) {
+            throw new InvalidCredentialsException("User account is deactivated");
+        }
 
-        //Generate token
+        // 4. Issue JWT
         String token = jwtService.generateToken(user.getId(), user.getUpiId(), user.getPhone());
-        log.info("User logged in Successfully: userId={} ,upiId={}", user.getId(), user.getUpiId());
-        //Return Auth Response
+        log.info("User logged in: userId={} upiId={}", user.getId(), user.getUpiId());
         return AuthResponse.of(token, user.getUpiId(), user.getFullName());
-
     }
 
     @Transactional(readOnly = true)
     public UserProfileResponse getByUserId(UUID userId) {
-        // Done : find user by ID, map to UserProfileResponse
-
-        User user = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-        log.info("Fetching user profile by userId={}", userId);
-        return UserProfileResponse.builder().id(user.getId()).fullName(user.getFullName()).phone(user.getPhone()).email(user.getEmail()).upiId(user.getUpiId()).isActive(user.isActive()).createdAt(user.getCreatedAt()).build();
-
-
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found for id: " + userId));
+        log.info("Fetching user profile: userId={}", userId);
+        return mapToProfileResponse(user);
     }
 
     @Transactional(readOnly = true)
     public UserProfileResponse getByUpiId(String upiId) {
+        User user = userRepository.findByUpiId(upiId)
+                .orElseThrow(() -> new UserNotFoundException("User not found for upiId: " + upiId));
+        log.info("Fetching user profile: upiId={}", upiId);
+        return mapToProfileResponse(user);
+    }
 
-        User user = userRepository.findByUpiId(upiId).orElseThrow(() -> new IllegalArgumentException("User not found"));
-        log.info("Fetching user profile by upiId={}", upiId);
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private UserProfileResponse mapToProfileResponse(User user) {
         return UserProfileResponse.builder()
-        .id(user.getId())
-        .fullName(user.getFullName())
-        .phone(user.getPhone())
-        .email(user.getEmail())
-        .upiId(user.getUpiId())
-        .isActive(user.isActive())
-        .createdAt(user.getCreatedAt())
-        .build();
+                .id(user.getId())
+                .fullName(user.getFullName())
+                .phone(user.getPhone())
+                .email(user.getEmail())
+                .upiId(user.getUpiId())
+                .isActive(user.isActive())
+                .createdAt(user.getCreatedAt())
+                .build();
+    }
 
+    private void validateDuplicatePhone(String phone) {
+        if (userRepository.existsByPhone(phone)) {
+            throw new UserAlreadyExistsException(
+                    "Phone number already registered: " + phone);
+        }
+    }
+
+    private User createAndSaveUser(RegisterRequest req) {
+
+        String upiId = upiIdGenerator.generate(req.getFullName());
+
+        String hashedPin = passwordEncoder.encode(req.getPin());
+
+        User user = User.builder()
+                .fullName(req.getFullName())
+                .phone(req.getPhone())
+                .email(req.getEmail())
+                .upiId(upiId)
+                .pinHash(hashedPin)
+                .isActive(true)
+                .build();
+
+        return userRepository.save(user);
+    }
+
+    private void saveUserCreatedOutboxEvent(User user) {
+
+        UserCreatedEvent event = buildUserCreatedEvent(user);
+
+        try {
+
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateId(user.getId().toString())
+                    .aggregateType("User")
+                    .eventType("user.created")
+                    .payload(objectMapper.writeValueAsString(event))
+                    .build();
+
+            outboxEventRepository.save(outboxEvent);
+
+        } catch (JsonProcessingException e) {
+
+            throw new RuntimeException(
+                    "Failed to serialize UserCreatedEvent for outbox",
+                    e);
+        }
+    }
+
+    private UserCreatedEvent buildUserCreatedEvent(User user) {
+
+        return UserCreatedEvent.builder()
+                .userId(user.getId())
+                .upiId(user.getUpiId())
+                .fullName(user.getFullName())
+                .phone(user.getPhone())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 }

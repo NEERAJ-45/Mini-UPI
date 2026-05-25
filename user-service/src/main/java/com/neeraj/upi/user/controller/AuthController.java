@@ -9,11 +9,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @Tag(name = "Authentication", description = "User registration and login")
 public class AuthController {
@@ -24,15 +25,15 @@ public class AuthController {
     @Operation(summary = "Register a new user — returns JWT + UPI ID")
     public ResponseEntity<ApiResponse<AuthResponse>> register(
             @Valid @RequestBody RegisterRequest request) {
-        // TODO: return 201 Created with userService.register(request)
-        throw new UnsupportedOperationException("Not implemented yet");
+        AuthResponse response = userService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
     }
 
     @PostMapping("/login")
     @Operation(summary = "Login with phone + PIN — returns JWT")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request) {
-        // TODO: return 200 OK with userService.login(request)
-        throw new UnsupportedOperationException("Not implemented yet");
+        AuthResponse response = userService.login(request);
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 }

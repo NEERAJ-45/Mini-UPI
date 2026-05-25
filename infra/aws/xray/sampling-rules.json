@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "default": {
+    "description": "RevPay default sampling rule — low rate for free tier",
+    "service_name": "*",
+    "resource_arn": "*",
+    "http_method": "*",
+    "url_path": "*",
+    "fixed_target": 1,
+    "rate": 0.01,
+    "host": "*",
+    "priority": 10000
+  },
+  "rules": [
+    {
+      "description": "Always trace errors (any 5xx response)",
+      "service_name": "*",
+      "resource_arn": "*",
+      "http_method": "*",
+      "url_path": "*",
+      "fixed_target": 0,
+      "rate": 1.0,
+      "host": "*",
+      "priority": 1,
+      "attributes": {
+        "http.status_code": "5*"
+      }
+    },
+    {
+      "description": "Transaction service — higher sampling for payment flow",
+      "service_name": "transaction-service",
+      "resource_arn": "*",
+      "http_method": "POST",
+      "url_path": "/transactions/*",
+      "fixed_target": 1,
+      "rate": 0.05,
+      "host": "*",
+      "priority": 100
+    },
+    {
+      "description": "Health checks — never trace (noise)",
+      "service_name": "*",
+      "resource_arn": "*",
+      "http_method": "GET",
+      "url_path": "/actuator/health",
+      "fixed_target": 0,
+      "rate": 0.0,
+      "host": "*",
+      "priority": 50
+    },
+    {
+      "description": "Swagger/OpenAPI — never trace",
+      "service_name": "*",
+      "resource_arn": "*",
+      "http_method": "GET",
+      "url_path": "/swagger-ui*",
+      "fixed_target": 0,
+      "rate": 0.0,
+      "host": "*",
+      "priority": 51
+    }
+  ]
+}

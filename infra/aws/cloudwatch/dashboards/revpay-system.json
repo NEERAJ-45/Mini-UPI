@@ -1,0 +1,92 @@
+{
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0, "y": 0, "width": 24, "height": 1,
+      "properties": {
+        "markdown": "# ⚙️ RevPay — System Health Dashboard\n_Cross-cutting system metrics, alarms, infrastructure_"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 1, "width": 12, "height": 6,
+      "properties": {
+        "title": "HTTP 5xx Errors (All Services)",
+        "metrics": [
+          ["RevPay/System", "HttpErrors5xx", {"stat": "Sum", "period": 60, "label": "5xx Errors", "color": "#d62728"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0}},
+        "annotations": {
+          "horizontal": [
+            {"label": "Alarm Threshold", "value": 20, "color": "#d62728", "fill": "above"}
+          ]
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 1, "width": 12, "height": 6,
+      "properties": {
+        "title": "Active Requests (Concurrent)",
+        "metrics": [
+          ["RevPay/System", "ActiveRequests", {"stat": "Maximum", "period": 60, "label": "Active", "color": "#1f77b4"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0, "y": 7, "width": 12, "height": 6,
+      "properties": {
+        "title": "Rate Limiter Rejections (Gateway)",
+        "metrics": [
+          ["RevPay/Gateway", "RateLimitRejections", {"stat": "Sum", "period": 60, "label": "Rejected/min", "color": "#ff7f0e"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12, "y": 7, "width": 12, "height": 6,
+      "properties": {
+        "title": "Wallet Transfer Latency (ms)",
+        "metrics": [
+          ["RevPay/Wallet", "WalletTransferLatency", {"stat": "p99", "period": 60, "label": "P99", "color": "#9467bd"}],
+          ["RevPay/Wallet", "WalletTransferLatency", {"stat": "Average", "period": 60, "label": "Avg", "color": "#17becf"}]
+        ],
+        "view": "timeSeries",
+        "region": "ap-south-1",
+        "period": 60,
+        "yAxis": {"left": {"min": 0, "label": "Milliseconds"}}
+      }
+    },
+    {
+      "type": "alarm",
+      "x": 0, "y": 13, "width": 24, "height": 3,
+      "properties": {
+        "title": "🚨 All Alarms Status",
+        "alarms": [
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-payment-failures-critical",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-5xx-errors-critical",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-latency-high",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-saga-stuck",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-outbox-backlog",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-rate-limit-surge",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-alb-unhealthy",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-alb-5xx",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-idempotency-surge",
+          "arn:aws:cloudwatch:ap-south-1:ACCOUNT_ID:alarm:revpay-billing-alert"
+        ]
+      }
+    }
+  ]
+}

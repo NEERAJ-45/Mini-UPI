@@ -5,6 +5,7 @@ import com.neeraj.upi.user.dto.UserProfileResponse;
 import com.neeraj.upi.user.service.JwtService;
 import com.neeraj.upi.user.service.QrCodeService;
 import com.neeraj.upi.user.service.UserService;
+import com.neeraj.upi.user.util.QrPayloadBuilder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/users")
@@ -29,23 +31,37 @@ public class UserProfileController {
     @Operation(summary = "Get current logged-in user's profile")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getMyProfile(
             @RequestHeader("Authorization") String authHeader) {
-        // TODO: extract userId from JWT, return userService.getByUserId(userId)
-        throw new UnsupportedOperationException("Not implemented yet");
+        String token = authHeader.substring(7);             // strip "Bearer "
+        UUID userId = UUID.fromString(jwtService.extractUserId(token));
+        return ResponseEntity.ok(ApiResponse.ok(userService.getByUserId(userId)));
     }
 
     @GetMapping("/{upiId}")
     @Operation(summary = "Lookup any user by their UPI ID (for payment resolution)")
     public ResponseEntity<ApiResponse<UserProfileResponse>> getByUpiId(
             @PathVariable String upiId) {
-        // TODO: return userService.getByUpiId(upiId)
-        throw new UnsupportedOperationException("Not implemented yet");
+        return ResponseEntity.ok(ApiResponse.ok(userService.getByUpiId(upiId)));
     }
 
     @GetMapping("/qr/{upiId}")
-    @Operation(summary = "Get QR code for a UPI ID (returns Base64 PNG)")
+    @Operation(summary = "Get QR code for a UPI ID (returns Base64 PNG + UPI URI)")
     public ResponseEntity<ApiResponse<Map<String, String>>> getQrCode(
             @PathVariable String upiId) {
-        // TODO: get profile, generate QR, return { upiId, qrBase64, upiUri }
-        throw new UnsupportedOperationException("Not implemented yet");
+        UserProfileResponse profile = userService.getByUpiId(upiId);
+
+        String upiUri = QrPayloadBuilder.builder()
+                .upiId(upiId)
+                .name(profile.getFullName())
+                .build();
+
+        String qrBase64 = qrCodeService.generateQrCodeBase64(upiId, profile.getFullName());
+
+        Map<String, String> result = Map.of(
+                "upiId",     upiId,
+                "upiUri",    upiUri,
+                "qrBase64",  qrBase64
+        );
+
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 }
