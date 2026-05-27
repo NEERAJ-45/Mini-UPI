@@ -1,15 +1,15 @@
 package com.neeraj.upi.user.service;
 
-import com.neeraj.upi.user.exception.InvalidJwtException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
+import java.security.Key;
 import java.util.*;
 
 @Service
@@ -23,61 +23,55 @@ public class JwtService {
     private long expiryMs;
 
     /**
-     * Generate a signed JWT with userId, upiId, and phone as claims.
-     * Uses JJWT 0.12.x API — algorithm inferred from key length (HS256).
+     * Generate a signed JWT with userId, upiId, and phone as claims
      */
     public String generateToken(UUID userId, String upiId, String phone) {
+        // TODO: use JJWT Jwts.builder(), set subject=userId, claims, expiry, sign with HS256
+        // Add this data fields to the token claims
         Map<String, Object> claims = new HashMap<>();
         claims.put("upiId", upiId);
         claims.put("phone", phone);
 
-        SecretKey key = getSigningKey();
-        Date now = new Date();
-        Date expiry = new Date(now.getTime() + expiryMs);
 
-        return Jwts.builder()
+        //Decode Base64 into bytes
+        byte [] keys  = Decoders.BASE64.decode(secret);
+        //  Create Hmac SHA Signing key from secret bytes
+        Key key  = Keys.hmacShaKeyFor(keys);
+
+        // Current Timestamp
+        Date currentDate = new Date();
+        Date expiryDate = new Date(currentDate.getTime() + expiryMs);
+
+
+        return  Jwts.builder()
                 .claims(claims)
                 .subject(userId.toString())
-                .issuedAt(now)
-                .expiration(expiry)
-                .signWith(key)          // JJWT 0.12.x — algorithm inferred from SecretKey
+                .issuedAt(currentDate)
+                .expiration(expiryDate)
+                .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
 
     /**
-     * Parse and validate a JWT. Returns claims payload.
-     * Uses JJWT 0.12.x API — verifyWith + parseSignedClaims.
+     * Parse and validate a JWT. Throws JwtException if invalid/expired
      */
     public Claims validateAndExtract(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())     // JJWT 0.12.x
-                .build()
-                .parseSignedClaims(token)        // JJWT 0.12.x (replaces deprecated parseClaimsJws)
-                .getPayload();                   // JJWT 0.12.x (replaces deprecated getBody)
+        // TODO: use Jwts.parser().verifyWith(key).build().parseSignedClaims(token)
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     public String extractUserId(String token) {
-        return validateAndExtract(token).getSubject();
+        // TODO: return validateAndExtract(token).getSubject()
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     public String extractUpiId(String token) {
-        return validateAndExtract(token).get("upiId", String.class);
+        // TODO: return validateAndExtract(token).get("upiId", String.class)
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     public boolean isTokenValid(String token) {
-        try {
-            validateAndExtract(token);
-            return true;
-        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
-            throw new InvalidJwtException("Invalid or expired JWT token");
-        }
-    }
-
-    // ── Private helpers ──────────────────────────────────────────────────────
-
-    private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secret);
-        return Keys.hmacShaKeyFor(keyBytes);
+        // TODO: try validateAndExtract, catch Exception return false
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 }

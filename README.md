@@ -30,7 +30,7 @@
 
 ## 🏗️ Tech Stack
 ```
-Java 21 | Spring Boot 3.3 | PostgreSQL 15 | Redis 7 | Apache Kafka | JWT (Auth0) | Swagger | Docker Compose
+Java 21 | Spring Boot 3.3 | PostgreSQL 15 | Redis 7 | Apache Kafka | JWT (JJWT 0.12) | Swagger | Docker Compose | AWS (CloudWatch, X-Ray, ALB) | Terraform
 **Testing Stack**: JUnit 5 | Testcontainers | REST Assured | WireMock | Awaitility
 ```
  assets/archupi.png
@@ -45,6 +45,8 @@ Java 21 | Spring Boot 3.3 | PostgreSQL 15 | Redis 7 | Apache Kafka | JWT (Auth0)
 - **🔄 Retry-Safe Design** – Network-failed requests can be safely retried with the same `Idempotency-Key`.
 - **🛡️ Fraud Protection** – Redis rate limiter enforces 10 requests/min per UPI ID, blocking brute-force attempts.
 - **🔐 Secure by Default** – JWT authentication on all endpoints, Swagger UI with token support. Secrets never exposed in code.
+- **📊 AWS-Native Observability & Infrastructure** – Structured JSON logging via CloudWatch Logs, distributed tracing with AWS X-Ray, ALB for SSL termination/health checks, and alarms configured via Terraform (engineered for the Free Tier).
+- **📱 QR & Profile Lookup** – Built-in user profile queries, UPI ID user resolution, and dynamic Base64-encoded payment QR code generation.
 
 ## ⚙️ Quick Start
 **One-command launch** (infra + app):
@@ -69,14 +71,27 @@ curl -X POST http://localhost:8080/transactions/send \
 ## 📡 API
 | Method | Endpoint                         | Description                      | Auth | Idempotency Required |
 |--------|----------------------------------|----------------------------------|------|----------------------|
-| POST   | `/auth/register`                 | Register & get JWT               | No   | No                   |
-| POST   | `/auth/login`                    | Login & get JWT                  | No   | No                   |
+| POST   | `/api/auth/register`             | Register & get JWT               | No   | No                   |
+| POST   | `/api/auth/login`                | Login & get JWT                  | No   | No                   |
+| GET    | `/users/me`                      | Get logged-in user profile       | JWT  | No                   |
+| GET    | `/users/{upiId}`                 | Lookup profile by UPI ID         | JWT  | No                   |
+| GET    | `/users/qr/{upiId}`              | Get QR code & UPI URI            | JWT  | No                   |
 | POST   | `/upi/create`                    | Create virtual UPI ID            | JWT  | Yes (optional)       |
 | POST   | `/transactions/send`             | Send money to UPI ID             | JWT  | **Yes**              |
 | GET    | `/transactions/history/{upi_id}` | Last 50 transactions             | JWT  | No                   |
 | GET    | `/wallet/balance/{upi_id}`       | Current balance                  | JWT  | No                   |
 
 *Idempotency key header: `Idempotency-Key`. For `send`, duplicate keys within 24h return original response; no double debit.*
+
+## 📊 AWS-Native Observability & Infrastructure
+The system includes production-grade AWS observability and infrastructure components, fully configured via Terraform to stay within the **AWS Free Tier ($0.00)**:
+- **🗂️ Centralized JSON Logging**: App services output structured JSON logs, shipped to **CloudWatch Logs** with custom retention policies. Log query examples are in [LOG_INSIGHTS_QUERIES.md](file:///docs/monitoring/LOG_INSIGHTS_QUERIES.md).
+- **📉 CloudWatch Dashboards**: Three dashboards (`RevPay-Business`, `RevPay-System`, and `RevPay-ALB`) tracking key metrics like success/failure counts, latency, and resource health.
+- **🚨 Proactive Alerting**: 10 alarms watching system latency, errors, target health, and billing. Integrates with **AWS SNS** for email notifications.
+- **⏱️ Distributed Tracing**: **AWS X-Ray** integration across Gateway, User, Wallet, Kafka, and Notification services for trace propagation and latency profiling.
+- **⚖️ Application Load Balancing (ALB)**: Native AWS ALB handles TLS termination, health checks, routing, and AZ failover.
+
+Check the detailed setup documentation in [AWS_OBSERVABILITY_MIGRATION_PLAN.md](file:///docs/monitoring/AWS_OBSERVABILITY_MIGRATION_PLAN.md) and [OPERATIONAL_RUNBOOKS.md](file:///docs/monitoring/OPERATIONAL_RUNBOOKS.md).
 
 ## 🧪 Testing
 | Type          | Coverage | Command            | Results                                           |
