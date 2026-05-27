@@ -7,7 +7,7 @@
 [![Coverage](https://img.shields.io/badge/Coverage-92%25-brightgreen?logo=jacoco)](https://github.com/yourusername/mini-upi/actions)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**1-LINE PITCH**: *Production UPI simulator: 5K TPS, zero double-spends*
+ 
 
 ## 📋 Table of Contents
 - [🎯 Problem Statement](#-problem-statement)
