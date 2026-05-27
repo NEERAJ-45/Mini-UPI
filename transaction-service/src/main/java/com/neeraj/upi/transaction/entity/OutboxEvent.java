@@ -18,7 +18,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class OutboxEvent {
+public class  OutboxEvent {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -30,7 +30,7 @@ public class OutboxEvent {
     @Column(name = "aggregate_type", nullable = false)
     private String aggregateType;
 
-    @Column(name = "event_type", nullable = false)
+    @Column(name = "event_tcxype", nullable = false)
     private String eventType;
 
     @Column(name = "payload", nullable = false, columnDefinition = "TEXT")

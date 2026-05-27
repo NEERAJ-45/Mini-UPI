@@ -10,6 +10,7 @@
 **1-LINE PITCH**: *Production UPI simulator: 5K TPS, zero double-spends*
 
 ## 📋 Table of Contents
+- [🎯 Problem Statement](#-problem-statement)
 - [🚀 Overview](#-overview)
 - [🏗️ Tech Stack](#-tech-stack)
 - [📐 Architecture](#-architecture)
@@ -22,6 +23,61 @@
 - [📈 Benchmarks](#-benchmarks)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
+
+---
+
+## 🎯 Problem Statement
+
+> *Why does RevPay exist — and why is building it hard?*
+
+Digital payment infrastructure is one of the most demanding engineering challenges at scale. Systems like UPI handle **billions of transactions daily**, operating under relentless concurrency, microsecond-level consistency requirements, and zero-tolerance for financial errors. Building a reliable platform in this domain means confronting a class of problems that go far beyond typical CRUD applications.
+
+### 🏚️ The Limits of Monolithic Architecture
+
+Traditional monolithic payment backends bundle authentication, transaction processing, wallet management, fraud detection, and notifications into a single deployable unit. This creates cascading failure points:
+
+- A spike in transaction volume can starve authentication or notification threads.
+- A bug in one module risks taking down the entire service.
+- Independent scaling of high-load components (e.g., wallet balance updates) becomes impossible.
+- Releases require full redeployment, increasing blast radius for every change.
+
+### ⚠️ Core Distributed Systems Challenges
+
+Even when decomposed into microservices, payment platforms face fundamental distributed computing problems that must be explicitly engineered for:
+
+| Challenge | Risk if Unaddressed |
+|---|---|
+| **Concurrent balance updates** | Race conditions leading to double-spending or negative balances |
+| **Duplicate requests / retries** | Charging a user multiple times for a single payment intent |
+| **Delayed event propagation** | Notification and audit services receiving stale or out-of-order data |
+| **Partial transaction failures** | Debit completed, credit never applied — leaving wallets in an inconsistent state |
+| **Service outages during settlement** | Funds lost in transit with no mechanism for recovery |
+| **Inter-service communication failures** | Cascading failures when downstream services are unreachable |
+
+### 💸 Financial Correctness is Non-Negotiable
+
+Unlike most distributed systems where eventual consistency is acceptable, financial platforms require **strict correctness guarantees**:
+
+- Every rupee debited must have a corresponding credit — enforced via **double-entry ledger accounting**.
+- Retried network calls must never produce duplicate charges — enforced via **idempotency keys**.
+- Concurrent wallet operations must be serialized without degrading throughput — enforced via **optimistic locking**.
+- Every transaction must be fully auditable — enforced via **immutable event streams**.
+
+### 🎯 The Design Challenge
+
+RevPay is engineered to address these challenges head-on. The goal is a **highly scalable, fault-tolerant, and secure distributed payment platform** capable of:
+
+- ✅ Processing real-time peer-to-peer transactions with **guaranteed transactional integrity**
+- ✅ Preventing duplicate payments through robust **idempotency strategies**
+- ✅ Handling concurrent load without double-spending via **optimistic concurrency control**
+- ✅ Recovering from partial failures through **event-driven, retry-safe architecture**
+- ✅ Providing end-to-end auditability via **Kafka-backed immutable event logs**
+- ✅ Scaling individual services independently without degrading **overall platform availability**
+- ✅ Securing every transaction with **JWT authentication**, **rate limiting**, and **fraud detection**
+
+This is not a toy project — it is a production-grade reference implementation of the patterns that power real-world fintech systems.
+
+---
 
 ## 🚀 Overview
 - **High-throughput virtual wallet** mimicking real UPI – create UPI IDs, send/receive money, fetch statements.
