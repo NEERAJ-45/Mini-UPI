@@ -1,6 +1,7 @@
 package com.neeraj.upi.user.controller;
 
 import com.neeraj.upi.common.dto.ApiResponse;
+import com.neeraj.upi.user.dto.QrCodeResponse;
 import com.neeraj.upi.user.dto.UserProfileResponse;
 import com.neeraj.upi.user.service.JwtService;
 import com.neeraj.upi.user.service.QrCodeService;
@@ -13,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -45,8 +45,7 @@ public class UserProfileController {
 
     @GetMapping("/qr/{upiId}")
     @Operation(summary = "Get QR code for a UPI ID (returns Base64 PNG + UPI URI)")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getQrCode(
-            @PathVariable String upiId) {
+    public ResponseEntity<ApiResponse<QrCodeResponse>> getQrCode(@PathVariable String upiId) {
         UserProfileResponse profile = userService.getByUpiId(upiId);
 
         String upiUri = QrPayloadBuilder.builder()
@@ -56,12 +55,13 @@ public class UserProfileController {
 
         String qrBase64 = qrCodeService.generateQrCodeBase64(upiId, profile.getFullName());
 
-        Map<String, String> result = Map.of(
-                "upiId",     upiId,
-                "upiUri",    upiUri,
-                "qrBase64",  qrBase64
-        );
+        QrCodeResponse response = QrCodeResponse.builder()
+                .upiId(upiId)
+                .fullName(profile.getFullName())
+                .upiUri(upiUri)
+                .qrCodeBase64(qrBase64)
+                .build();
 
-        return ResponseEntity.ok(ApiResponse.ok(result));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 }

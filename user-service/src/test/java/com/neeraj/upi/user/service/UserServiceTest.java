@@ -1,12 +1,17 @@
 package com.neeraj.upi.user.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neeraj.upi.user.dto.AuthResponse;
 import com.neeraj.upi.user.dto.LoginRequest;
 import com.neeraj.upi.user.dto.RegisterRequest;
 import com.neeraj.upi.user.dto.UserProfileResponse;
+import com.neeraj.upi.user.entity.OutboxEvent;
 import com.neeraj.upi.user.entity.User;
-import com.neeraj.upi.user.event.UserCreatedEvent;
-import com.neeraj.upi.user.kafka.UserEventPublisher;
+import com.neeraj.upi.user.exception.InvalidCredentialsException;
+import com.neeraj.upi.user.exception.UserAlreadyExistsException;
+import com.neeraj.upi.user.exception.UserNotFoundException;
+import com.neeraj.upi.user.repository.OutboxEventRepository;
 import com.neeraj.upi.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,165 +35,121 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
-    @Mock
-    private UserRepository userRepository;
+    // ── Mocks ─────────────────────────────────────────────────────────────────
 
-    @Mock
-    private PasswordEncoder passwordEncoder;
-
-    @Mock
-    private JwtService jwtService;
-
-    @Mock
-    private UpiIdGenerator upiIdGenerator;
-
-    @Mock
-    private UserEventPublisher eventPublisher;
+    @Mock private UserRepository        userRepository;
+    @Mock private OutboxEventRepository outboxEventRepository;
+    @Mock private PasswordEncoder        passwordEncoder;
+    @Mock private JwtService             jwtService;
+    @Mock private UpiIdGenerator         upiIdGenerator;
+    @Mock private ObjectMapper           objectMapper;
 
     @InjectMocks
     private UserService userService;
 
-    @Captor
-    private ArgumentCaptor<User> userCaptor;
+    // ── Captors ───────────────────────────────────────────────────────────────
 
-    @Captor
-    private ArgumentCaptor<UserCreatedEvent> eventCaptor;
+    @Captor private ArgumentCaptor<User>        userCaptor;
+    @Captor private ArgumentCaptor<OutboxEvent> outboxCaptor;
 
-    private static final String TOKEN = "jwt.token.test";
-    private static final String UPI_ID = "john@miniupi";
-    private static final String HASHED_PIN = "$2a$10$hashedPinValue";
-    private static final UUID USER_ID = UUID.randomUUID();
-    private static final Instant NOW = Instant.now();
+    // ── Constants ─────────────────────────────────────────────────────────────
 
-    // ── register() ───────────────────────────────────────────────────────────
+    private static final String  TOKEN      = "jwt.token.test";
+    private static final String  UPI_ID     = "john@miniupi";
+    private static final String  HASHED_PIN = "$2a$10$hashedPinValue";
+    private static final UUID    USER_ID    = UUID.randomUUID();
+    private static final Instant NOW        = Instant.now();
+
+    // ── register() ────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("register should create user, publish event, and return AuthResponse")
-    void registerShouldSucceed() {
-        RegisterRequest req = new RegisterRequest();
-        req.setFullName("John Doe");
-        req.setPhone("9876543210");
-        req.setEmail("john@example.com");
-        req.setPin("1234");
+    @DisplayName("register: saves User + OutboxEvent in the same transaction and returns AuthResponse")
+    void register_success_savesUserAndOutboxEvent() throws JsonProcessingException {
+        RegisterRequest req = buildRegisterRequest("John Doe", "9876543210", "john@example.com", "1234");
 
-        User savedUser = User.builder()
-                .id(USER_ID)
-                .fullName("John Doe")
-                .phone("9876543210")
-                .email("john@example.com")
-                .upiId(UPI_ID)
-                .pinHash(HASHED_PIN)
-                .isActive(true)
-                .createdAt(NOW)
-                .build();
+        User savedUser = buildUser(USER_ID, "John Doe", "9876543210", "john@example.com", UPI_ID, true);
 
         when(userRepository.existsByPhone(req.getPhone())).thenReturn(false);
         when(upiIdGenerator.generate(req.getFullName())).thenReturn(UPI_ID);
         when(passwordEncoder.encode(req.getPin())).thenReturn(HASHED_PIN);
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"userId\":\"" + USER_ID + "\"}");
         when(jwtService.generateToken(USER_ID, UPI_ID, req.getPhone())).thenReturn(TOKEN);
 
         AuthResponse response = userService.register(req);
 
+        // ── Assert response ──────────────────────────────────────────────────
         assertNotNull(response);
-        assertEquals(TOKEN, response.getToken());
-        assertEquals(UPI_ID, response.getUpiId());
+        assertEquals(TOKEN,      response.getToken());
+        assertEquals(UPI_ID,     response.getUpiId());
         assertEquals("John Doe", response.getFullName());
-        assertEquals("Bearer", response.getTokenType());
+        assertEquals("Bearer",   response.getTokenType());
 
-        verify(userRepository).existsByPhone(req.getPhone());
-        verify(upiIdGenerator).generate(req.getFullName());
-        verify(passwordEncoder).encode(req.getPin());
+        // ── Verify User was saved ────────────────────────────────────────────
         verify(userRepository).save(userCaptor.capture());
-        verify(jwtService).generateToken(USER_ID, UPI_ID, req.getPhone());
-        verify(eventPublisher).publishUserCreated(eventCaptor.capture());
-
         User capturedUser = userCaptor.getValue();
-        assertEquals("John Doe", capturedUser.getFullName());
-        assertEquals("9876543210", capturedUser.getPhone());
-        assertEquals("john@example.com", capturedUser.getEmail());
-        assertEquals(UPI_ID, capturedUser.getUpiId());
-        assertEquals(HASHED_PIN, capturedUser.getPinHash());
+        assertEquals("John Doe",          capturedUser.getFullName());
+        assertEquals("9876543210",         capturedUser.getPhone());
+        assertEquals("john@example.com",   capturedUser.getEmail());
+        assertEquals(UPI_ID,               capturedUser.getUpiId());
+        assertEquals(HASHED_PIN,           capturedUser.getPinHash());
         assertTrue(capturedUser.isActive());
 
-        UserCreatedEvent capturedEvent = eventCaptor.getValue();
-        assertEquals(USER_ID, capturedEvent.getUserId());
-        assertEquals(UPI_ID, capturedEvent.getUpiId());
-        assertEquals("John Doe", capturedEvent.getFullName());
-        assertEquals("9876543210", capturedEvent.getPhone());
-        assertEquals(NOW, capturedEvent.getCreatedAt());
+        // ── Verify OutboxEvent was saved (not direct Kafka publish) ──────────
+        verify(outboxEventRepository).save(outboxCaptor.capture());
+        OutboxEvent outbox = outboxCaptor.getValue();
+        assertEquals(USER_ID.toString(), outbox.getAggregateId());
+        assertEquals("User",             outbox.getAggregateType());
+        assertEquals("user.created",     outbox.getEventType());
+        assertFalse(outbox.isProcessed(), "OutboxEvent must start as unprocessed");
+        assertNotNull(outbox.getPayload());
+
+        // ── Verify JWT issued ────────────────────────────────────────────────
+        verify(jwtService).generateToken(USER_ID, UPI_ID, req.getPhone());
     }
 
     @Test
-    @DisplayName("register should throw IllegalArgumentException when phone already exists")
-    void registerShouldThrowWhenPhoneExists() {
-        RegisterRequest req = new RegisterRequest();
-        req.setFullName("John Doe");
-        req.setPhone("9876543210");
-        req.setPin("1234");
-
+    @DisplayName("register: throws UserAlreadyExistsException when phone is already registered")
+    void register_duplicatePhone_throwsUserAlreadyExistsException() {
+        RegisterRequest req = buildRegisterRequest("John Doe", "9876543210", null, "1234");
         when(userRepository.existsByPhone(req.getPhone())).thenReturn(true);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> userService.register(req));
-        assertEquals("Phone number already registered", ex.getMessage());
+        assertThrows(UserAlreadyExistsException.class, () -> userService.register(req));
 
         verify(userRepository).existsByPhone(req.getPhone());
-        verify(upiIdGenerator, never()).generate(anyString());
-        verify(passwordEncoder, never()).encode(anyString());
-        verify(userRepository, never()).save(any());
-        verify(eventPublisher, never()).publishUserCreated(any());
+        verify(upiIdGenerator,       never()).generate(anyString());
+        verify(passwordEncoder,      never()).encode(anyString());
+        verify(userRepository,       never()).save(any());
+        verify(outboxEventRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("register should handle user with no email")
-    void registerShouldHandleNullEmail() {
-        RegisterRequest req = new RegisterRequest();
-        req.setFullName("Jane Doe");
-        req.setPhone("9876543211");
-        req.setPin("5678");
-
-        User savedUser = User.builder()
-                .id(UUID.randomUUID())
-                .fullName("Jane Doe")
-                .phone("9876543211")
-                .upiId("jane@miniupi")
-                .pinHash(HASHED_PIN)
-                .isActive(true)
-                .createdAt(NOW)
-                .build();
+    @DisplayName("register: user with no email is accepted (email is optional)")
+    void register_nullEmail_succeeds() throws JsonProcessingException {
+        RegisterRequest req = buildRegisterRequest("Jane Doe", "9876543211", null, "5678");
+        User savedUser = buildUser(UUID.randomUUID(), "Jane Doe", "9876543211", null, "jane@miniupi", true);
 
         when(userRepository.existsByPhone(req.getPhone())).thenReturn(false);
         when(upiIdGenerator.generate(req.getFullName())).thenReturn("jane@miniupi");
         when(passwordEncoder.encode(req.getPin())).thenReturn(HASHED_PIN);
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
         when(jwtService.generateToken(any(UUID.class), anyString(), anyString())).thenReturn(TOKEN);
 
         AuthResponse response = userService.register(req);
 
         assertNotNull(response);
         assertEquals("Jane Doe", response.getFullName());
-
-        verify(eventPublisher).publishUserCreated(any());
+        verify(outboxEventRepository).save(any(OutboxEvent.class));
     }
 
-    // ── login() ──────────────────────────────────────────────────────────────
+    // ── login() ───────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("login should return AuthResponse for valid credentials")
-    void loginShouldSucceed() {
-        LoginRequest req = new LoginRequest();
-        req.setPhone("9876543210");
-        req.setPin("1234");
-
-        User user = User.builder()
-                .id(USER_ID)
-                .fullName("John Doe")
-                .phone("9876543210")
-                .upiId(UPI_ID)
-                .pinHash(HASHED_PIN)
-                .isActive(true)
-                .build();
+    @DisplayName("login: returns AuthResponse for valid phone + PIN")
+    void login_validCredentials_returnsAuthResponse() {
+        LoginRequest req  = buildLoginRequest("9876543210", "1234");
+        User user = buildUser(USER_ID, "John Doe", "9876543210", null, UPI_ID, true);
 
         when(userRepository.findByPhone(req.getPhone())).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(req.getPin(), HASHED_PIN)).thenReturn(true);
@@ -197,10 +158,10 @@ class UserServiceTest {
         AuthResponse response = userService.login(req);
 
         assertNotNull(response);
-        assertEquals(TOKEN, response.getToken());
-        assertEquals(UPI_ID, response.getUpiId());
+        assertEquals(TOKEN,      response.getToken());
+        assertEquals(UPI_ID,     response.getUpiId());
         assertEquals("John Doe", response.getFullName());
-        assertEquals("Bearer", response.getTokenType());
+        assertEquals("Bearer",   response.getTokenType());
 
         verify(userRepository).findByPhone(req.getPhone());
         verify(passwordEncoder).matches(req.getPin(), HASHED_PIN);
@@ -208,157 +169,131 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("login should throw IllegalArgumentException when phone not found")
-    void loginShouldThrowWhenPhoneNotFound() {
-        LoginRequest req = new LoginRequest();
-        req.setPhone("9876543210");
-        req.setPin("1234");
-
+    @DisplayName("login: throws InvalidCredentialsException when phone not found")
+    void login_phoneNotFound_throwsInvalidCredentials() {
+        LoginRequest req = buildLoginRequest("9999999999", "1234");
         when(userRepository.findByPhone(req.getPhone())).thenReturn(Optional.empty());
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> userService.login(req));
-        assertEquals("Invalid Pin or Phone", ex.getMessage());
+        assertThrows(InvalidCredentialsException.class, () -> userService.login(req));
 
         verify(userRepository).findByPhone(req.getPhone());
         verify(passwordEncoder, never()).matches(anyString(), anyString());
-        verify(jwtService, never()).generateToken(any(), anyString(), anyString());
+        verify(jwtService,      never()).generateToken(any(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("login should throw IllegalArgumentException when PIN does not match")
-    void loginShouldThrowWhenPinMismatch() {
-        LoginRequest req = new LoginRequest();
-        req.setPhone("9876543210");
-        req.setPin("wrongPin");
-
-        User user = User.builder()
-                .id(USER_ID)
-                .fullName("John Doe")
-                .phone("9876543210")
-                .upiId(UPI_ID)
-                .pinHash(HASHED_PIN)
-                .isActive(true)
-                .build();
+    @DisplayName("login: throws InvalidCredentialsException when PIN does not match")
+    void login_wrongPin_throwsInvalidCredentials() {
+        LoginRequest req  = buildLoginRequest("9876543210", "wrong");
+        User user = buildUser(USER_ID, "John Doe", "9876543210", null, UPI_ID, true);
 
         when(userRepository.findByPhone(req.getPhone())).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(req.getPin(), HASHED_PIN)).thenReturn(false);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> userService.login(req));
-        assertEquals("Invalid Pin or Phone", ex.getMessage());
+        assertThrows(InvalidCredentialsException.class, () -> userService.login(req));
 
         verify(passwordEncoder).matches(req.getPin(), HASHED_PIN);
         verify(jwtService, never()).generateToken(any(), anyString(), anyString());
     }
 
     @Test
-    @DisplayName("login should throw IllegalStateException when user is inactive")
-    void loginShouldThrowWhenUserInactive() {
-        LoginRequest req = new LoginRequest();
-        req.setPhone("9876543210");
-        req.setPin("1234");
-
-        User user = User.builder()
-                .id(USER_ID)
-                .fullName("John Doe")
-                .phone("9876543210")
-                .upiId(UPI_ID)
-                .pinHash(HASHED_PIN)
-                .isActive(false)
-                .build();
+    @DisplayName("login: throws InvalidCredentialsException when account is inactive")
+    void login_inactiveAccount_throwsInvalidCredentials() {
+        LoginRequest req  = buildLoginRequest("9876543210", "1234");
+        User user = buildUser(USER_ID, "John Doe", "9876543210", null, UPI_ID, false);
 
         when(userRepository.findByPhone(req.getPhone())).thenReturn(Optional.of(user));
         when(passwordEncoder.matches(req.getPin(), HASHED_PIN)).thenReturn(true);
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> userService.login(req));
-        assertEquals("User Account is not active", ex.getMessage());
+        assertThrows(InvalidCredentialsException.class, () -> userService.login(req));
 
         verify(jwtService, never()).generateToken(any(), anyString(), anyString());
     }
 
-    // ── getByUserId() ────────────────────────────────────────────────────────
+    // ── getByUserId() ─────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("getByUserId should return profile when user exists")
-    void getByUserIdShouldSucceed() {
-        UUID userId = UUID.randomUUID();
+    @DisplayName("getByUserId: returns UserProfileResponse when user exists")
+    void getByUserId_found_returnsProfile() {
+        User user = buildUser(USER_ID, "John Doe", "9876543210", "john@example.com", UPI_ID, true);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
 
-        User user = User.builder()
-                .id(userId)
-                .fullName("John Doe")
-                .phone("9876543210")
-                .email("john@example.com")
-                .upiId(UPI_ID)
-                .isActive(true)
-                .createdAt(NOW)
-                .build();
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-
-        UserProfileResponse response = userService.getByUserId(userId);
+        UserProfileResponse response = userService.getByUserId(USER_ID);
 
         assertNotNull(response);
-        assertEquals(userId, response.getId());
-        assertEquals("John Doe", response.getFullName());
-        assertEquals("9876543210", response.getPhone());
-        assertEquals("john@example.com", response.getEmail());
-        assertEquals(UPI_ID, response.getUpiId());
+        assertEquals(USER_ID,            response.getId());
+        assertEquals("John Doe",          response.getFullName());
+        assertEquals("9876543210",        response.getPhone());
+        assertEquals("john@example.com",  response.getEmail());
+        assertEquals(UPI_ID,              response.getUpiId());
         assertTrue(response.isActive());
-        assertEquals(NOW, response.getCreatedAt());
     }
 
     @Test
-    @DisplayName("getByUserId should throw IllegalArgumentException when user not found")
-    void getByUserIdShouldThrowWhenNotFound() {
-        UUID userId = UUID.randomUUID();
+    @DisplayName("getByUserId: throws UserNotFoundException when user does not exist")
+    void getByUserId_notFound_throwsUserNotFoundException() {
+        UUID unknown = UUID.randomUUID();
+        when(userRepository.findById(unknown)).thenReturn(Optional.empty());
 
-        when(userRepository.findById(userId)).thenReturn(Optional.empty());
-
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> userService.getByUserId(userId));
-        assertEquals("User not found", ex.getMessage());
+        assertThrows(UserNotFoundException.class, () -> userService.getByUserId(unknown));
     }
 
-    // ── getByUpiId() ─────────────────────────────────────────────────────────
+    // ── getByUpiId() ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("getByUpiId should return profile when user exists")
-    void getByUpiIdShouldSucceed() {
-        User user = User.builder()
-                .id(USER_ID)
-                .fullName("John Doe")
-                .phone("9876543210")
-                .email("john@example.com")
-                .upiId(UPI_ID)
-                .isActive(true)
-                .createdAt(NOW)
-                .build();
-
+    @DisplayName("getByUpiId: returns UserProfileResponse when user exists")
+    void getByUpiId_found_returnsProfile() {
+        User user = buildUser(USER_ID, "John Doe", "9876543210", "john@example.com", UPI_ID, true);
         when(userRepository.findByUpiId(UPI_ID)).thenReturn(Optional.of(user));
 
         UserProfileResponse response = userService.getByUpiId(UPI_ID);
 
         assertNotNull(response);
-        assertEquals(USER_ID, response.getId());
-        assertEquals("John Doe", response.getFullName());
-        assertEquals("9876543210", response.getPhone());
-        assertEquals("john@example.com", response.getEmail());
-        assertEquals(UPI_ID, response.getUpiId());
+        assertEquals(USER_ID,            response.getId());
+        assertEquals("John Doe",          response.getFullName());
+        assertEquals("9876543210",        response.getPhone());
+        assertEquals("john@example.com",  response.getEmail());
+        assertEquals(UPI_ID,              response.getUpiId());
         assertTrue(response.isActive());
-        assertEquals(NOW, response.getCreatedAt());
     }
 
     @Test
-    @DisplayName("getByUpiId should throw IllegalArgumentException when user not found")
-    void getByUpiIdShouldThrowWhenNotFound() {
-        String upiId = "unknown@miniupi";
+    @DisplayName("getByUpiId: throws UserNotFoundException when upiId does not exist")
+    void getByUpiId_notFound_throwsUserNotFoundException() {
+        String unknown = "ghost@miniupi";
+        when(userRepository.findByUpiId(unknown)).thenReturn(Optional.empty());
 
-        when(userRepository.findByUpiId(upiId)).thenReturn(Optional.empty());
+        assertThrows(UserNotFoundException.class, () -> userService.getByUpiId(unknown));
+    }
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> userService.getByUpiId(upiId));
-        assertEquals("User not found", ex.getMessage());
+    // ── Private builder helpers ───────────────────────────────────────────────
+
+    private RegisterRequest buildRegisterRequest(String name, String phone, String email, String pin) {
+        RegisterRequest req = new RegisterRequest();
+        req.setFullName(name);
+        req.setPhone(phone);
+        req.setEmail(email);
+        req.setPin(pin);
+        return req;
+    }
+
+    private LoginRequest buildLoginRequest(String phone, String pin) {
+        LoginRequest req = new LoginRequest();
+        req.setPhone(phone);
+        req.setPin(pin);
+        return req;
+    }
+
+    private User buildUser(UUID id, String name, String phone, String email, String upiId, boolean active) {
+        return User.builder()
+                .id(id)
+                .fullName(name)
+                .phone(phone)
+                .email(email)
+                .upiId(upiId)
+                .pinHash(HASHED_PIN)
+                .isActive(active)
+                .createdAt(NOW)
+                .build();
     }
 }

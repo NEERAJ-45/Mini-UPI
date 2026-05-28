@@ -7,6 +7,7 @@ import com.neeraj.upi.user.entity.OutboxEvent;
 import com.neeraj.upi.user.entity.User;
 import com.neeraj.upi.user.event.UserCreatedEvent;
 import com.neeraj.upi.user.exception.InvalidCredentialsException;
+import com.neeraj.upi.user.exception.OutboxSerializationException;
 import com.neeraj.upi.user.exception.UserAlreadyExistsException;
 import com.neeraj.upi.user.exception.UserNotFoundException;
 import com.neeraj.upi.user.repository.OutboxEventRepository;
@@ -149,9 +150,7 @@ public class UserService {
 
         } catch (JsonProcessingException e) {
 
-            throw new RuntimeException(
-                    "Failed to serialize UserCreatedEvent for outbox",
-                    e);
+            throw new OutboxSerializationException(e);
         }
     }
 

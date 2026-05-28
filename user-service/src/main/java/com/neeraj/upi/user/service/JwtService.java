@@ -1,15 +1,16 @@
 package com.neeraj.upi.user.service;
 
+import com.neeraj.upi.user.exception.InvalidJwtException;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.security.Key;
+import javax.crypto.SecretKey;
 import java.util.*;
 
 @Service
@@ -22,56 +23,72 @@ public class JwtService {
     @Value("${jwt.expiry-ms}")
     private long expiryMs;
 
+    // ── Token generation ──────────────────────────────────────────────────────
+
     /**
-     * Generate a signed JWT with userId, upiId, and phone as claims
+     * Generate a signed JWT with userId as subject, plus upiId and phone claims.
+     * Uses JJWT 0.12.x — signWith(key) auto-selects HS256 for HMAC-SHA keys.
      */
     public String generateToken(UUID userId, String upiId, String phone) {
-        // TODO: use JJWT Jwts.builder(), set subject=userId, claims, expiry, sign with HS256
-        // Add this data fields to the token claims
         Map<String, Object> claims = new HashMap<>();
         claims.put("upiId", upiId);
         claims.put("phone", phone);
 
+        Date now    = new Date();
+        Date expiry = new Date(now.getTime() + expiryMs);
 
-        //Decode Base64 into bytes
-        byte [] keys  = Decoders.BASE64.decode(secret);
-        //  Create Hmac SHA Signing key from secret bytes
-        Key key  = Keys.hmacShaKeyFor(keys);
-
-        // Current Timestamp
-        Date currentDate = new Date();
-        Date expiryDate = new Date(currentDate.getTime() + expiryMs);
-
-
-        return  Jwts.builder()
+        return Jwts.builder()
                 .claims(claims)
                 .subject(userId.toString())
-                .issuedAt(currentDate)
-                .expiration(expiryDate)
-                .signWith(key, SignatureAlgorithm.HS256)
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(buildKey())       // JJWT 0.12.x — no deprecated SignatureAlgorithm
                 .compact();
     }
 
+    // ── Token validation / extraction ─────────────────────────────────────────
+
     /**
-     * Parse and validate a JWT. Throws JwtException if invalid/expired
+     * Parse and validate a JWT. Throws {@link InvalidJwtException} if the token
+     * is malformed, has an invalid signature, or has expired.
      */
     public Claims validateAndExtract(String token) {
-        // TODO: use Jwts.parser().verifyWith(key).build().parseSignedClaims(token)
-        throw new UnsupportedOperationException("Not implemented yet");
+        try {
+            return Jwts.parser()
+                    .verifyWith(buildKey())          // JJWT 0.12.x
+                    .build()
+                    .parseSignedClaims(token)        // JJWT 0.12.x
+                    .getPayload();
+        } catch (JwtException | IllegalArgumentException ex) {
+            log.warn("JWT validation failed: {}", ex.getMessage());
+            throw new InvalidJwtException("Token is invalid or expired: " + ex.getMessage());
+        }
     }
 
+    /** Returns the userId (subject) embedded in the token. */
     public String extractUserId(String token) {
-        // TODO: return validateAndExtract(token).getSubject()
-        throw new UnsupportedOperationException("Not implemented yet");
+        return validateAndExtract(token).getSubject();
     }
 
+    /** Returns the upiId claim embedded in the token. */
     public String extractUpiId(String token) {
-        // TODO: return validateAndExtract(token).get("upiId", String.class)
-        throw new UnsupportedOperationException("Not implemented yet");
+        return validateAndExtract(token).get("upiId", String.class);
     }
 
+    /**
+     * Returns {@code true} if the token parses and validates successfully.
+     * Throws {@link InvalidJwtException} (a 401 BaseException) on any error —
+     * callers that truly only need a boolean should catch it themselves.
+     */
     public boolean isTokenValid(String token) {
-        // TODO: try validateAndExtract, catch Exception return false
-        throw new UnsupportedOperationException("Not implemented yet");
+        validateAndExtract(token);   // throws InvalidJwtException on failure
+        return true;
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private SecretKey buildKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 }

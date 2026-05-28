@@ -1,0 +1,56 @@
+name: PR Validation — All Services
+
+# ─────────────────────────────────────────────────────────────────────
+#  Runs on every PR targeting main.
+#  Validates the FULL monorepo: builds common + all five services,
+#  runs their full test suites (Testcontainers spins real Postgres/Kafka).
+#  Does NOT build Docker images or deploy — pure quality gate.
+# ─────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Build & Test (All Modules)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Verify required secrets exist
+        run: |
+          test -n "${{ secrets.POSTGRES_USER }}"     || (echo "❌ POSTGRES_USER missing"     && exit 1)
+          test -n "${{ secrets.POSTGRES_PASSWORD }}" || (echo "❌ POSTGRES_PASSWORD missing" && exit 1)
+          test -n "${{ secrets.REDIS_PASSWORD }}"    || (echo "❌ REDIS_PASSWORD missing"    && exit 1)
+          test -n "${{ secrets.JWT_SECRET }}"        || (echo "❌ JWT_SECRET missing"        && exit 1)
+          echo "✅ All required secrets are present"
+
+      - name: Run full test suite (Testcontainers — no infra pre-spin needed)
+        run: |
+          chmod +x mvnw
+          ./mvnw clean verify \
+            -pl common,user-service,wallet-service,transaction-service,notification-service,api-gateway \
+            -am \
+            -B \
+            --no-transfer-progress \
+            -Dspring.datasource.username=${{ secrets.POSTGRES_USER }} \
+            -Dspring.datasource.password=${{ secrets.POSTGRES_PASSWORD }}
+
+      - name: Upload Surefire test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-test-results-all-services
+          path: '**/target/surefire-reports/'
+          retention-days: 7
